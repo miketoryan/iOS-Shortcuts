@@ -7,6 +7,7 @@ on:
       - 'build_shortcut.py'
       - 'one-tap-dnd-2h.cherri'
       - 'validate_compiled.py'
+      - 'sign_hubsign.py'
       - 'tests/**'
       - '.github/workflows/build-shortcut.yml'
   workflow_dispatch:
@@ -20,7 +21,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - name: Verify the Shortcut configuration
+      - name: Verify reference logic tests
         run: python3 -m unittest discover -s tests -v
       - name: Install official Cherri v2.3.0 compiler
         run: |
@@ -31,31 +32,28 @@ jobs:
           mkdir -p /tmp/cherri-tool
           unzip -q /tmp/cherri.zip -d /tmp/cherri-tool
           CHERRI="$(find /tmp/cherri-tool -type f -name cherri | head -n 1)"
-          if [ -z "$CHERRI" ]; then echo 'Cherri binary not found'; exit 1; fi
+          test -n "$CHERRI"
           chmod +x "$CHERRI"
           echo "CHERRI=$CHERRI" >> "$GITHUB_ENV"
-      - name: Build with official Cherri and request partner-supported signing
+      - name: Compile and inspect actual plist; repair static Focus dictionary
         run: |
           set -euo pipefail
           "$CHERRI" one-tap-dnd-2h.cherri --debug
           python3 validate_compiled.py
-          find . -maxdepth 2 -type f -name '*.shortcut' -print
-          test -s '一键免打扰（2小时）.shortcut'
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path('一键免打扰（2小时）.shortcut')
-          assert p.read_bytes().startswith(b'AEA1'), 'Cherri did not return signed AEA1 data'
-          print('Signed Cherri shortcut size:', p.stat().st_size)
-          PY
-      - name: Publish signed shortcut to repository
+      - name: Sign the verified corrected plist
+        run: |
+          set -euo pipefail
+          python3 sign_hubsign.py
+          test -s build/signed/one-tap-dnd-2h.shortcut
+      - name: Publish signed shortcut
         run: |
           set -euo pipefail
           mkdir -p dist
-          cp '一键免打扰（2小时）.shortcut' dist/one-tap-dnd-2h.shortcut
+          cp build/signed/one-tap-dnd-2h.shortcut dist/one-tap-dnd-2h.shortcut
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add dist/one-tap-dnd-2h.shortcut
           if ! git diff --cached --quiet; then
-            git commit -m 'Publish Cherri signed iOS shortcut [skip ci]'
+            git commit -m 'Publish verified DND-2h shortcut [skip ci]'
             git push
           fi
