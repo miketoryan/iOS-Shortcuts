@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Try legacy RoutineHub HubSign's publicly documented JSON signing endpoint.
+"""Sign a vetted, non-sensitive Apple Shortcut plist via Cherri's HubSign API.
 
-This is an optional third-party signer. It receives only the unsigned shortcut
-definition and no Apple ID or GitHub credentials. Never bypass authentication:
-if the service reports that a key or membership is required, stop and fail.
+Protocol matches open-source Cherri 2.3.0 signing.go:
+POST JSON shortcutName / shortcut as XML, User-Agent: cherri/2.3.0.
+Does not send any secrets, Apple ID or GitHub authentication data.
 """
 import argparse
 import json
@@ -16,47 +16,35 @@ ENDPOINT = "https://hubsign.routinehub.services/sign"
 
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--input", default="build/unsigned/one-tap-dnd-2h.shortcut")
-    parser.add_argument("--output", default="build/signed/one-tap-dnd-2h.shortcut")
-    parser.add_argument("--name", default="一键免打扰（2小时）")
-    args = parser.parse_args()
+    p = argparse.ArgumentParser()
+    p.add_argument("--input", default="build/verified_unsigned.shortcut")
+    p.add_argument("--output", default="build/signed/one-tap-dnd-2h.shortcut")
+    p.add_argument("--name", default="一键免打扰（2小时）")
+    args = p.parse_args()
     raw = Path(args.input).read_bytes()
-    workflow = plistlib.loads(raw)
-    xml = plistlib.dumps(workflow, fmt=plistlib.FMT_XML).decode("utf-8")
-    payload = json.dumps({
-        "shortcutName": args.name,
-        "shortcut": xml,
-    }, ensure_ascii=False).encode("utf-8")
-    req = Request(
-        ENDPOINT,
-        data=payload,
-        method="POST",
-        headers={
-            "Content-Type": "application/json",
-            "Accept": "application/octet-stream",
-            "User-Agent": "ios-shortcuts-workflow/1.0",
-            "Origin": "https://routinehub.co",
-            "Referer": "https://routinehub.co/",
-        },
-    )
+    wf = plistlib.loads(raw)
+    xml = plistlib.dumps(wf, fmt=plistlib.FMT_XML).decode("utf-8")
+    body = json.dumps({"shortcutName": args.name, "shortcut": xml}, ensure_ascii=False).encode("utf-8")
+    req = Request(ENDPOINT, data=body, method="POST",
+                  headers={"Content-Type": "application/json",
+                           "User-Agent": "cherri/2.3.0"})
     try:
         with urlopen(req, timeout=30) as response:
-            response_type = response.headers.get('Content-Type', '')
+            content_type = response.headers.get("Content-Type", "")
             signed = response.read()
     except HTTPError as exc:
-        # Do not retry on authentication, membership, access or policy responses.
-        raise SystemExit(f"HubSign refused signing: HTTP {exc.code}") from None
+        raise SystemExit(f"HubSign refused the request: HTTP {exc.code}") from None
     except URLError as exc:
-        raise SystemExit(f"HubSign unavailable: {exc.reason}") from None
+        raise SystemExit(f"HubSign network error: {exc.reason}") from None
 
-    if not signed.startswith(b"AEA1"):
-        snippet = signed[:400].decode("utf-8", errors="replace").replace("\\n", " ")
-        raise SystemExit(f"HubSign returned {response_type}, non-AEA1 (excerpt: {snippet!r}): refusing to publish")
+    if content_type not in ("application/octet-stream", "application/x-plist", "application/x-apple-shortcut"):
+        raise SystemExit(f"HubSign responded with unexpected content type: {content_type!r}")
+    if len(signed) < 100 or not signed.startswith(b"AEA1"):
+        raise SystemExit("HubSign did not return an AEA1 signed archive; nothing will be published")
     path = Path(args.output)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(signed)
-    print(f"HubSign AEA1 archive received: {len(signed)} bytes")
+    print(f"Signed verified shortcut via HubSign: {path}, size={len(signed)}")
 
 
 if __name__ == "__main__":
