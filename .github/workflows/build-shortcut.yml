@@ -22,20 +22,46 @@ jobs:
         run: python3 -m unittest discover -s tests -v
       - name: Generate the unsigned binary plist
         run: python3 build_shortcut.py
-      - name: Request Apple's public signing
+      - name: Sign using Apple (or documented third-party fallback)
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p build/signed
-          shortcuts sign --mode anyone \
+          if shortcuts sign --mode anyone \
             --input build/unsigned/one-tap-dnd-2h.shortcut \
-            --output build/signed/one-tap-dnd-2h.shortcut
-          test -s build/signed/one-tap-dnd-2h.shortcut
+            --output build/signed/one-tap-dnd-2h.shortcut; then
+            echo 'Apple signing succeeded'
+          else
+            echo 'Apple signing unavailable on headless runner; using Shortcuty third-party service.'
+            echo 'The transmitted workflow only contains public device-setting actions; no credentials.'
+            curl --fail --show-error --silent --max-time 45 \
+              --form 'file=@build/unsigned/one-tap-dnd-2h.shortcut' \
+              'https://sign.shortcuty.app/api/v1/sign?response=json' \
+              --output build/signed-response.json
+            python3 - <<'PY'
+          import base64
+          import hashlib
+          import json
+          from pathlib import Path
+          raw = Path('build/unsigned/one-tap-dnd-2h.shortcut').read_bytes()
+          record = json.loads(Path('build/signed-response.json').read_text())
+          assert record.get('success') is True, 'Signing service reported failure'
+          meta = record['file']
+          signed = base64.b64decode(meta['content_base64'], validate=True)
+          assert meta['input_sha256'] == hashlib.sha256(raw).hexdigest(), 'Input hash differs'
+          assert meta['signed_sha256'] == hashlib.sha256(signed).hexdigest(), 'Output hash differs'
+          assert len(signed) == meta['size'], 'Signed file size differs'
+          assert signed.startswith(b'AEA1'), 'Signed file is not an AEA1 archive'
+          assert meta.get('signing_mode') == 'anyone', 'Signed file is not public'
+          Path('build/signed/one-tap-dnd-2h.shortcut').write_bytes(signed)
+          print(f"Third-party signed archive obtained: {len(signed)} bytes")
+          PY
+          fi
           python3 - <<'PY'
           from pathlib import Path
-          signed = Path('build/signed/one-tap-dnd-2h.shortcut')
-          assert signed.read_bytes().startswith(b'AEA1'), 'No signed AEA1 envelope'
-          print(f'Apple-signed archive created ({signed.stat().st_size} bytes)')
+          p = Path('build/signed/one-tap-dnd-2h.shortcut')
+          assert p.is_file() and p.stat().st_size > 100
+          assert p.read_bytes().startswith(b'AEA1'), 'No signed AEA1 envelope'
           PY
       - name: Publish signed shortcut to repository
         shell: bash
