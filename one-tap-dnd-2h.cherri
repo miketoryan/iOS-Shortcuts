@@ -5,6 +5,7 @@
 #define color purple
 
 #include 'actions/settings'
+#include 'actions/device'
 #include 'actions/calendar'
 
 setBluetooth(false)
