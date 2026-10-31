@@ -6,6 +6,7 @@ on:
     paths:
       - 'build_shortcut.py'
       - 'one-tap-dnd-2h.cherri'
+      - 'validate_compiled.py'
       - 'tests/**'
       - '.github/workflows/build-shortcut.yml'
   workflow_dispatch:
@@ -36,12 +37,13 @@ jobs:
       - name: Build with official Cherri and request partner-supported signing
         run: |
           set -euo pipefail
-          "$CHERRI" one-tap-dnd-2h.cherri
+          "$CHERRI" one-tap-dnd-2h.cherri --debug
+          python3 validate_compiled.py
           find . -maxdepth 2 -type f -name '*.shortcut' -print
-          test -s '一键免打扰.shortcut'
+          test -s '一键免打扰（2小时）.shortcut'
           python3 - <<'PY'
           from pathlib import Path
-          p = Path('一键免打扰.shortcut')
+          p = Path('一键免打扰（2小时）.shortcut')
           assert p.read_bytes().startswith(b'AEA1'), 'Cherri did not return signed AEA1 data'
           print('Signed Cherri shortcut size:', p.stat().st_size)
           PY
@@ -49,7 +51,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
-          cp '一键免打扰.shortcut' dist/one-tap-dnd-2h.shortcut
+          cp '一键免打扰（2小时）.shortcut' dist/one-tap-dnd-2h.shortcut
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add dist/one-tap-dnd-2h.shortcut
