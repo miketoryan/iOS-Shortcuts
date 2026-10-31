@@ -38,10 +38,10 @@ jobs:
           set -euo pipefail
           "$CHERRI" one-tap-dnd-2h.cherri
           find . -maxdepth 2 -type f -name '*.shortcut' -print
-          test -s 'one-tap-dnd-2h.shortcut'
+          test -s '一键免打扰.shortcut'
           python3 - <<'PY'
           from pathlib import Path
-          p = Path('one-tap-dnd-2h.shortcut')
+          p = Path('一键免打扰.shortcut')
           assert p.read_bytes().startswith(b'AEA1'), 'Cherri did not return signed AEA1 data'
           print('Signed Cherri shortcut size:', p.stat().st_size)
           PY
@@ -49,10 +49,10 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
-          cp one-tap-dnd-2h.shortcut dist/one-tap-dnd-2h.shortcut
+          cp '一键免打扰.shortcut' dist/one-tap-dnd-2h.shortcut
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add dist/one-tap-dnd-2h.shortcut
+          git add dist/一键免打扰.shortcut
           if ! git diff --cached --quiet; then
             git commit -m 'Publish Cherri signed iOS shortcut [skip ci]'
             git push
