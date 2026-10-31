@@ -1,47 +1,75 @@
 #!/usr/bin/env python3
-"""Validate the *Cherri-compiled* Shortcut plist, not merely reference source.
+"""Verify Cherri compiler output, repair its FocusModes field encoding, then
+produce an *unsigned* plist for a separate signing step.
 
-Fail closed: never publish a signed file if it would leave DND off, set an
-unbounded Focus, or fail to use the dynamic two-hour adjusted date.
+Cherri 2.3.0 serializes a custom action's static FocusModes dictionary as a
+WFDictionaryFieldValue, but Apple's dnd.set needs a plain dictionary. The
+compiler's built-in setFocusMode also omits Enabled=1. Patch and validate
+the real compiled plist before signing; do not change the date magic variable.
 """
-from pathlib import Path
 import plistlib
+from pathlib import Path
 
-files = list(Path(".").glob("*.plist"))
-assert files, "Compiler didn't emit debug .plist; cannot validate actual actions"
-assert len(files) == 1, f"Ambiguous debug plists: {files}"
-wf = plistlib.loads(files[0].read_bytes())
+plists = list(Path(".").glob("*.plist"))
+assert len(plists) == 1, f"Expected a single debug .plist, found: {plists}"
+wf = plistlib.loads(plists[0].read_bytes())
 actions = wf["WFWorkflowActions"]
-print("Compiled actions:")
-for i, a in enumerate(actions):
-    print(i, a["WFWorkflowActionIdentifier"], str(a.get("WFWorkflowActionParameters", {}))[:1600])
 
 ids = [a["WFWorkflowActionIdentifier"] for a in actions]
-expect = [
+assert ids == [
     "is.workflow.actions.bluetooth.set",
     "is.workflow.actions.wifi.set",
     "is.workflow.actions.cellulardata.set",
-]
-assert ids[:3] == expect, f"Unexpected radio action order: {ids[:3]}"
-for a in actions[:3]:
-    p = a["WFWorkflowActionParameters"]
-    assert (p.get("OnValue") is False or p.get("Enabled") is False), f"Radio not OFF: {p}"
+    "is.workflow.actions.date",
+    "is.workflow.actions.adjustdate",
+    "is.workflow.actions.dnd.set",
+], f"Unexpected action sequence: {ids}"
 
-date_actions = [a for a in actions if a["WFWorkflowActionIdentifier"] == "is.workflow.actions.adjustdate"]
-assert len(date_actions) == 1, "Expected one two-hour adjust date"
-date_params = date_actions[0]["WFWorkflowActionParameters"]
-assert "2" in str(date_params), "2 hours missing from date adjustment"
-assert ("hr" in str(date_params) or "Hour" in str(date_params)), "Hour unit missing"
-output_uuid = date_params.get("UUID")
-assert output_uuid, "Date adjustment missing UUID"
+for index in range(3):
+    params = actions[index]["WFWorkflowActionParameters"]
+    assert params.get("OnValue") is False, f"Radio action {index} not explicitly OFF"
 
-focuses = [a for a in actions if a["WFWorkflowActionIdentifier"] == "is.workflow.actions.dnd.set"]
-assert len(focuses) == 1, f"Expected exactly one Focus action, got {len(focuses)}"
-fp = focuses[0]["WFWorkflowActionParameters"]
-assert fp.get("Enabled") == 1, f"DND must explicitly turn ON; compiled params: {fp}"
-assert fp.get("Operation") == "Turn", "DND must not be a toggle"
-assert fp.get("AssertionType") == "Time", "DND needs a fixed deadline, not unlimited duration"
-assert fp.get("FocusModes", {}).get("Identifier") == "com.apple.donotdisturb.mode.default", "Not DND"
-assert output_uuid in str(fp.get("Time", "")), "DND must end at the adjusted date output"
-assert ids.index("is.workflow.actions.dnd.set") > ids.index("is.workflow.actions.adjustdate"), "Focus triggered before end time exists"
-print("Verified actual compiled shortcut: radios off, DND ON, until dynamic +2 hours.")
+now = actions[3]["WFWorkflowActionParameters"]
+assert now["WFDateActionMode"] == "Current Date"
+now_id = now["UUID"]
+
+delta = actions[4]["WFWorkflowActionParameters"]
+assert delta["WFAdjustOperation"] == "Add"
+duration = delta["WFDuration"]["Value"]
+assert int(duration["Magnitude"]) == 2
+assert duration["Unit"] == "hr"
+assert delta["WFDate"]["Value"]["attachmentsByRange"]["{0, 1}"]["OutputUUID"] == now_id
+deadline_uuid = delta["UUID"]
+
+p = actions[5]["WFWorkflowActionParameters"]
+assert p["Operation"] == "Turn"
+assert int(p["Enabled"]) == 1, "DND must explicitly be set ON, never toggle/off"
+assert p["AssertionType"] == "Time"
+assert p["Time"]["Value"]["attachmentsByRange"]["{0, 1}"]["OutputUUID"] == deadline_uuid
+
+focus = p["FocusModes"]
+if "Value" in focus and focus.get("WFSerializationType") == "WFDictionaryFieldValue":
+    # Cherri custom action wraps the nested FocusModes dictionary in a
+    # WFDictionaryFieldValue. Apple's native Set Focus needs an unwrapped dict.
+    fixed = {}
+    for item in focus["Value"]["WFDictionaryFieldValueItems"]:
+        key = item["WFKey"]["Value"]["string"]
+        val = item["WFValue"]["Value"]["string"]
+        fixed[key] = val
+    focus = fixed
+assert focus == {
+    "DisplayString": "Do Not Disturb",
+    "Identifier": "com.apple.donotdisturb.mode.default",
+}, f"Not the system's Do Not Disturb Focus: {focus}"
+p["FocusModes"] = focus
+p["Enabled"] = 1  # ensure integer, not float in Apple plist
+assert p["FocusModes"]["Identifier"] == "com.apple.donotdisturb.mode.default"
+
+output = Path("build/verified_unsigned.shortcut")
+output.parent.mkdir(parents=True, exist_ok=True)
+output.write_bytes(plistlib.dumps(wf, fmt=plistlib.FMT_XML))
+check = plistlib.loads(output.read_bytes())
+assert check["WFWorkflowActions"][5]["WFWorkflowActionParameters"]["Enabled"] == 1
+assert check["WFWorkflowActions"][5]["WFWorkflowActionParameters"]["FocusModes"] == focus
+print("PASS: three radios OFF; current date + exactly 2 hours; DND explicitly ON until computed date")
+print(f"PASS: repaired FocusModes native dictionary; verified unsigned plist: {output}")
