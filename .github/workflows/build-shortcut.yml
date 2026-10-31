@@ -1,0 +1,52 @@
+name: Build and sign iPhone shortcut
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'build_shortcut.py'
+      - 'tests/**'
+      - '.github/workflows/build-shortcut.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify the Shortcut configuration
+        run: python3 -m unittest discover -s tests -v
+      - name: Generate the unsigned binary plist
+        run: python3 build_shortcut.py
+      - name: Request Apple's public signing
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/signed
+          shortcuts sign --mode anyone \
+            --input build/unsigned/one-tap-dnd-2h.shortcut \
+            --output build/signed/one-tap-dnd-2h.shortcut
+          test -s build/signed/one-tap-dnd-2h.shortcut
+          python3 - <<'PY'
+          from pathlib import Path
+          signed = Path('build/signed/one-tap-dnd-2h.shortcut')
+          assert signed.read_bytes().startswith(b'AEA1'), 'No signed AEA1 envelope'
+          print(f'Apple-signed archive created ({signed.stat().st_size} bytes)')
+          PY
+      - name: Publish signed shortcut to repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp build/signed/one-tap-dnd-2h.shortcut dist/one-tap-dnd-2h.shortcut
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add dist/one-tap-dnd-2h.shortcut
+          if ! git diff --cached --quiet; then
+            git commit -m 'Publish signed iOS shortcut [skip ci]'
+            git push
+          fi
