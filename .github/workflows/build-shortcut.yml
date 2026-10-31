@@ -5,7 +5,7 @@ on:
     branches: [main]
     paths:
       - 'build_shortcut.py'
-      - 'sign_hubsign.py'
+      - 'one-tap-dnd-2h.cherri'
       - 'tests/**'
       - '.github/workflows/build-shortcut.yml'
   workflow_dispatch:
@@ -16,33 +16,44 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - name: Verify the Shortcut configuration
         run: python3 -m unittest discover -s tests -v
-      - name: Generate the unsigned binary plist
-        run: python3 build_shortcut.py
-      - name: Sign with publicly documented legacy HubSign
+      - name: Install official Cherri v2.3.0 compiler
         run: |
           set -euo pipefail
-          python3 sign_hubsign.py
+          curl --fail --location --show-error --silent \
+            'https://github.com/electrikmilk/cherri/releases/download/v2.3.0/cherri_linux-x86_64.zip' \
+            --output /tmp/cherri.zip
+          mkdir -p /tmp/cherri-tool
+          unzip -q /tmp/cherri.zip -d /tmp/cherri-tool
+          CHERRI="$(find /tmp/cherri-tool -type f -name cherri | head -n 1)"
+          if [ -z "$CHERRI" ]; then echo 'Cherri binary not found'; exit 1; fi
+          chmod +x "$CHERRI"
+          echo "CHERRI=$CHERRI" >> "$GITHUB_ENV"
+      - name: Build with official Cherri and request partner-supported signing
+        run: |
+          set -euo pipefail
+          "$CHERRI" one-tap-dnd-2h.cherri
+          find . -maxdepth 2 -type f -name '*.shortcut' -print
+          test -s 'one-tap-dnd-2h.shortcut'
           python3 - <<'PY'
           from pathlib import Path
-          p = Path('build/signed/one-tap-dnd-2h.shortcut')
-          assert p.is_file() and p.stat().st_size > 100
-          assert p.read_bytes().startswith(b'AEA1'), 'No signed AEA1 envelope'
-          print('Signed archive structurally valid:', p.stat().st_size, 'bytes')
+          p = Path('one-tap-dnd-2h.shortcut')
+          assert p.read_bytes().startswith(b'AEA1'), 'Cherri did not return signed AEA1 data'
+          print('Signed Cherri shortcut size:', p.stat().st_size)
           PY
       - name: Publish signed shortcut to repository
         run: |
           set -euo pipefail
           mkdir -p dist
-          cp build/signed/one-tap-dnd-2h.shortcut dist/one-tap-dnd-2h.shortcut
+          cp one-tap-dnd-2h.shortcut dist/one-tap-dnd-2h.shortcut
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add dist/one-tap-dnd-2h.shortcut
           if ! git diff --cached --quiet; then
-            git commit -m 'Publish signed iOS shortcut [skip ci]'
+            git commit -m 'Publish Cherri signed iOS shortcut [skip ci]'
             git push
           fi
