@@ -1,38 +1,38 @@
 # iOS-Shortcuts
 
-此仓库用于构建和发布 iPhone 快捷指令。
+一键免打扰（2小时）——iPhone 快捷指令。
 
-## 一键免打扰（2小时）
+## 已修复版本（2026-10-31）
 
-**手机直接下载已签名成品：**
+[手机获取最新版已签名 .shortcut](https://github.com/miketoryan/iOS-Shortcuts/raw/4e6908b/dist/one-tap-dnd-2h.shortcut)
 
-[下载「一键免打扰」已签名 Shortcut](https://github.com/miketoryan/iOS-Shortcuts/raw/refs/heads/main/dist/one-tap-dnd-2h.shortcut)
+**这是新版本，旧版文件不要继续使用。** 如果之前导入过，请先在快捷指令 App 中删除旧指令，再下载并添加新版本。
 
-2026-10-31 GitHub Actions 已实际成功：官方 Cherri v2.3.0 Linux 编译器通过 RoutineHub HubSign 签名，验证输出以 AEA1 开头并发布至 dist/one-tap-dnd-2h.shortcut（签名文件约 22 KB）。
+### 点击执行后，严格按照顺序
 
-**注意：这是已签名的 .shortcut 文件下载地址，不是苹果官方 iCloud 分享链接。** 只能在 iPhone 导入后，经快捷指令 App 的「拷贝 iCloud 链接」分享得到 iCloud 官方链接。
+1. **关闭蓝牙**（设置为关，不是切换状态）。
+2. **关闭 Wi-Fi**（设置为关）。
+3. **关闭蜂窝数据**（设置为关）。
+4. 获取点击时的当前时间。
+5. 当前时间 **增加 2 小时** 得到截止时间。
+6. **将勿扰模式设为开启**，并设置在第 5 步计算的日期时间自动结束。
 
-### 仅用 iPhone 导入
+例如 20:00 点击：立即关闭三个无线开关，打开勿扰模式；22:00 系统自动关闭勿扰模式。**蓝牙、Wi-Fi、蜂窝数据在 22:00 不会自动打开。**
 
-1. 在 iPhone Safari 打开上方已签名文件链接并下载。
-2. 打开苹果「文件」App →「下载项」，点击 one-tap-dnd-2h.shortcut。
-3. 由「快捷指令」App 打开，检查动作，再点击「添加快捷指令」。
-4. 添加后可以重命名或添加到主屏幕。
+### 修复原因
 
-功能：关闭蓝牙、Wi-Fi、蜂窝数据，开启勿扰模式，两小时后自动退出勿扰模式。两小时后无线开关**不会**自动重新打开。
+此前 Cherri 生成的默认 Focus 动作可能遗漏 Enabled=1。手动指定后，又发现它将 FocusModes 字段错误编码为 WFDictionaryFieldValue。最新版经过以下修复：
+- 直接明确 Enabled=1 和 Operation=Turn；
+- 编译后将 FocusModes 修正为苹果原生的字典格式；
+- 验证六步动作顺序、三个无线关闭开关、当前日期、加两小时、勿扰的开始与结束时间引用；
+- 仅在全部验证通过后，调用第三方 HubSign 签名，发布已签名文件。
 
-### 自动构建
+[GitHub Actions 最新成功构建与结构验证](https://github.com/miketoryan/iOS-Shortcuts/actions/runs/41200503551)
 
-- one-tap-dnd-2h.cherri — Cherri 原生源码（真正用于发布）
-- build_shortcut.py — Python 版结构参考生成器
-- tests/test_build.py — Python 版配置测试
-- .github/workflows/build-shortcut.yml — Actions：运行测试、调用 Cherri、签名并发布
-- sign_hubsign.py — 研究用旧版 HubSign 客户端，目前旧接口返回网页而非签名文件，不在发布流水线使用
+**验证范围**：代码、编译出的原生 plist、签名文件与仓库发布已经验证通过；但苹果 iPhone iOS 26 上的实际运行及两个小时后的系统关停仍需设备验证。
 
-[查看成功的 GitHub Actions 构建](https://github.com/miketoryan/iOS-Shortcuts/actions/runs/41199505316)
+### 仅用 iPhone 安装
 
-本项目没有上传 Apple ID、密码或账号信息。第三方签名方会收到不包含账号或秘密信息的快捷指令动作定义。
+用 iPhone Safari 打开上面的最新版文件链接，保存到「文件」App，点文件导入「快捷指令」。这是已签名文件方式，不是苹果 iCloud 分享链接，无法把 GitHub 链接伪装成 iCloud 链接。
 
-**验证边界：** 构建和签名已成功，但尚未在用户的 iOS 26 真机上检验每项动作及两小时后自动关闭的实际效果。
-
-**提醒：** 启用后手机会失去无线网络及蜂窝数据连接，导入前确保已完成下载，并了解恢复联网的方法。
+注：HubSign 是第三方签名服务，仅接收不包含 Apple ID、密码或其他秘密的快捷指令内容。
