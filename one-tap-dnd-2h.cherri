@@ -1,6 +1,6 @@
-// Original Cherri source: close Bluetooth/Wi-Fi/cellular data, then DND for 2 hours.
-// Designed for iPhone; the radios stay off after DND ends.
-#define name 一键免打扰
+// 一键免打扰：先关闭三个无线开关，再启用勿扰至两小时后的时间点。
+// 结束时只有勿扰模式自动关闭；无线开关保持关闭。
+#define name 一键免打扰（2小时）
 #define glyph moon
 #define color purple
 
@@ -8,10 +8,21 @@
 #include 'actions/device'
 #include 'actions/calendar'
 
+// 明确指定 Enabled=1，避免使用 Cherri 旧版 setFocusMode 时遗漏启用参数。
+action 'dnd.set' enableDndUntil(text deadline: 'Time') {
+    "Operation": "Turn",
+    "Enabled": 1,
+    "AssertionType": "Time",
+    "FocusModes": {
+        "DisplayString": "Do Not Disturb",
+        "Identifier": "com.apple.donotdisturb.mode.default"
+    }
+}
+
 setBluetooth(false)
 setWifi(false)
 setCellularData(false)
 
-const now = currentDate()
-const endTime = adjustDate("{now}", "Add", qty(2, "hr"))
-setFocusMode("Do Not Disturb", "Time", "{endTime}")
+const startTime = currentDate()
+const finishTime = adjustDate("{startTime}", "Add", qty(2, "hr"))
+enableDndUntil("{finishTime}")
