@@ -42,6 +42,7 @@ def main():
     )
     try:
         with urlopen(req, timeout=30) as response:
+            response_type = response.headers.get('Content-Type', '')
             signed = response.read()
     except HTTPError as exc:
         # Do not retry on authentication, membership, access or policy responses.
@@ -50,7 +51,8 @@ def main():
         raise SystemExit(f"HubSign unavailable: {exc.reason}") from None
 
     if not signed.startswith(b"AEA1"):
-        raise SystemExit("HubSign returned non-AEA1 data: refusing to publish")
+        snippet = signed[:400].decode("utf-8", errors="replace").replace("\\n", " ")
+        raise SystemExit(f"HubSign returned {response_type}, non-AEA1 (excerpt: {snippet!r}): refusing to publish")
     path = Path(args.output)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(signed)
