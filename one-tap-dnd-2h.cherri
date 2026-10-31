@@ -1,0 +1,16 @@
+// Original Cherri source: close Bluetooth/Wi-Fi/cellular data, then DND for 2 hours.
+// Designed for iPhone; the radios stay off after DND ends.
+#define name 一键免打扰
+#define glyph moon
+#define color purple
+
+#include 'actions/settings'
+#include 'actions/calendar'
+
+setBluetooth(false)
+setWifi(false)
+setCellularData(false)
+
+const now = currentDate()
+const endTime = adjustDate("{now}", "Add", qty(2, "hr"))
+setFocusMode("Do Not Disturb", "Time", "{endTime}")
