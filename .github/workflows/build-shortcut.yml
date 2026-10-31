@@ -52,7 +52,7 @@ jobs:
           cp '一键免打扰.shortcut' dist/one-tap-dnd-2h.shortcut
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add dist/一键免打扰.shortcut
+          git add dist/one-tap-dnd-2h.shortcut
           if ! git diff --cached --quiet; then
             git commit -m 'Publish Cherri signed iOS shortcut [skip ci]'
             git push
