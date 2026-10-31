@@ -1,45 +1,38 @@
 # iOS-Shortcuts
 
-用于生成和发布 iPhone 快捷指令。当前指令：**一键免打扰（2小时）**。
+此仓库用于构建和发布 iPhone 快捷指令。
 
-点击运行时：
+## 一键免打扰（2小时）
 
-1. 关闭蓝牙（不是仅在控制中心断开配件）；
-2. 关闭 Wi-Fi；
-3. 关闭蜂窝数据；
-4. 计算当前时间往后 2 小时；
-5. 开启勿扰专注模式，并设置在计算出的时间结束。
+**手机直接下载已签名成品：**
 
-**两小时后只关闭勿扰模式**；蓝牙、Wi-Fi 和蜂窝数据不会自动重新打开。
+[下载「一键免打扰」已签名 Shortcut](https://github.com/miketoryan/iOS-Shortcuts/raw/refs/heads/main/dist/one-tap-dnd-2h.shortcut)
 
-## 当前状态（2026-10-31）
+2026-10-31 GitHub Actions 已实际成功：官方 Cherri v2.3.0 Linux 编译器通过 RoutineHub HubSign 签名，验证输出以 AEA1 开头并发布至 dist/one-tap-dnd-2h.shortcut（签名文件约 22 KB）。
 
-- 已完成生成程序 build_shortcut.py 和 tests/test_build.py。
-- 五项结构测试通过；可以生成未签名 .shortcut 文件。
-- 已在 GitHub Actions 实测：苹果官方 shortcuts sign 因运行环境未登录 iCloud 而失败。
-- 尝试通过 Shortcuty 第三方签名 API（https://sign.shortcuty.app/api/v1/sign）执行公开签名，服务返回 HTTP 403。
-- **尚未生成能够在 iPhone 上确认导入的已签名文件，更没有苹果 iCloud 分享链接。**
-- 不提供不存在的下载链接，不能将未签名文件冒充可导入文件。
+**注意：这是已签名的 .shortcut 文件下载地址，不是苹果官方 iCloud 分享链接。** 只能在 iPhone 导入后，经快捷指令 App 的「拷贝 iCloud 链接」分享得到 iCloud 官方链接。
 
-[查看 GitHub Actions 日志](https://github.com/miketoryan/iOS-Shortcuts/actions)
+### 仅用 iPhone 导入
 
-## 成功签名后从手机下载
+1. 在 iPhone Safari 打开上方已签名文件链接并下载。
+2. 打开苹果「文件」App →「下载项」，点击 one-tap-dnd-2h.shortcut。
+3. 由「快捷指令」App 打开，检查动作，再点击「添加快捷指令」。
+4. 添加后可以重命名或添加到主屏幕。
 
-只有在 GitHub Actions 构建成功、仓库内出现 dist/one-tap-dnd-2h.shortcut 后，才能用下面的下载地址：
+功能：关闭蓝牙、Wi-Fi、蜂窝数据，开启勿扰模式，两小时后自动退出勿扰模式。两小时后无线开关**不会**自动重新打开。
 
-https://github.com/miketoryan/iOS-Shortcuts/raw/refs/heads/main/dist/one-tap-dnd-2h.shortcut
+### 自动构建
 
-通过 iPhone Safari 下载签名后的文件，打开「文件」App，点击文件导入苹果「快捷指令」。
+- one-tap-dnd-2h.cherri — Cherri 原生源码（真正用于发布）
+- build_shortcut.py — Python 版结构参考生成器
+- tests/test_build.py — Python 版配置测试
+- .github/workflows/build-shortcut.yml — Actions：运行测试、调用 Cherri、签名并发布
+- sign_hubsign.py — 研究用旧版 HubSign 客户端，目前旧接口返回网页而非签名文件，不在发布流水线使用
 
-以上是 GitHub 文件下载，**不是苹果 iCloud 一键导入分享链接**。后者需要通过苹果分享流程发布。
+[查看成功的 GitHub Actions 构建](https://github.com/miketoryan/iOS-Shortcuts/actions/runs/41199505316)
 
-## 自动构建与安全性
+本项目没有上传 Apple ID、密码或账号信息。第三方签名方会收到不包含账号或秘密信息的快捷指令动作定义。
 
-- 生成源码：build_shortcut.py
-- 结构测试：python3 -m unittest discover -s tests -v
-- GitHub Actions 首先尝试苹果 shortcuts sign --mode anyone。
-- 如果缺少 iCloud 登录，会向 Shortcuty 第三方公开签名服务传送**仅含开关设置动作**的快捷指令文件，不传送密码、账号或其他私密数据。
-- 如果任何签名流程失败，构建明确失败，**不会发布未签名文件**。
-- 即使收到 AEA1 签名文件，也需要在真实 iPhone 上核验动作。
+**验证边界：** 构建和签名已成功，但尚未在用户的 iOS 26 真机上检验每项动作及两小时后自动关闭的实际效果。
 
-注意：执行后手机会失去 Wi-Fi 和蜂窝网络连接；请预先保存需要离线使用的资料。
+**提醒：** 启用后手机会失去无线网络及蜂窝数据连接，导入前确保已完成下载，并了解恢复联网的方法。
